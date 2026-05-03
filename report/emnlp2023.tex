@@ -16,6 +16,7 @@
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
+\usepackage{multirow}
 
 % Figures: ship PDFs under report/figures/ for builds where ../results/ is absent (e.g.\ clean clone).
 \graphicspath{{./figures/}{../results/figures/}}
@@ -92,6 +93,8 @@ Mean $\kappa$ & 0.882 & 0.642 & 0.888 & 0.886 \\
 \label{tab:iaa}
 \end{table}
 
+Human consistency agreement (Krippendorff $\alpha{=}0.62$) is the weakest of the four dimensions, reflecting how hard source-grounded judgments are even for humans. We therefore expect automatic judges to struggle most on the same dimension when aligned to this gold.
+
 \section{LLM Judges and Experimental Factors}
 \label{sec:judges}
 
@@ -109,7 +112,7 @@ We vary \textbf{prompt wording} across three variants: \emph{minimal} (short ins
 \label{sec:meta}
 
 \paragraph{Alignment with humans.}
-Table~\ref{tab:corr} reports Spearman $\rho$ between judge scores and human means ($n{=}100$ summary-level items), using the \emph{standard} prompt without reference. Kendall $\tau$ follows the same ordering (e.g., GPT-OSS-20B: $\tau{=}0.74$, $0.52$, $0.70$, $0.76$; Qwen3-32B: $0.58$, $0.47$, $0.64$, $0.75$ on the four dimensions). Figure~\ref{fig:corr} visualizes the same correlation pattern: both judges track humans well on relevance, but consistency is the weakest link, especially for Qwen3-32B ($\rho{=}0.57$).
+Table~\ref{tab:corr} reports Spearman $\rho$ between judge scores and human means ($n{=}100$ summary-level items per dimension), using the \emph{standard} prompt without reference. Table~\ref{tab:kendall} gives Kendall $\tau$ for the same items; rank agreement follows the same pattern as $\rho$. Figure~\ref{fig:corr} plots $\rho$ by dimension: both judges track humans best on relevance, while consistency is the weakest link, especially for Qwen3-32B ($\rho{=}0.57$).
 
 \begin{table}[t]
 \centering
@@ -126,12 +129,91 @@ Qwen3-32B & 0.678 & 0.569 & 0.740 & 0.862 \\
 \label{tab:corr}
 \end{table}
 
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+Judge & Coh. & Con. & Flu. & Rel. \\
+\midrule
+GPT-OSS-20B & 0.735 & 0.523 & 0.702 & 0.755 \\
+Qwen3-32B & 0.579 & 0.475 & 0.641 & 0.746 \\
+\bottomrule
+\end{tabular}
+\caption{Kendall $\tau$ vs.\ human gold (same setting as Table~\ref{tab:corr}).}
+\label{tab:kendall}
+\end{table}
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{corr_by_dimension_two_judges.pdf}
 \caption{Spearman $\rho$ by dimension for the two judges (same setting as Table~\ref{tab:corr}).}
 \label{fig:corr}
 \end{figure}
+
+\subsection{Mean absolute error and systematic bias}
+Correlation alone can mask calibration: a judge may preserve ranks while systematically shifting levels. Table~\ref{tab:mae} reports mean absolute error (MAE) between judge and human scores and the mean signed error (positive $=$ judge higher than humans). GPT-OSS-20B is closest on fluency (MAE 0.57) but still tends to \emph{inflate} coherence and consistency relative to annotators (mean biases ${+}0.81$ and ${+}0.27$). Qwen3-32B shows much larger MAE on coherence, consistency, and fluency (${\sim}1.3$--1.8 points on the 1--5 scale) with strong positive bias on those three dimensions, while staying closer on relevance. Together with Table~\ref{tab:corr}, this suggests Qwen3-32B is not only less rank-aligned but also systematically lenient on surface-oriented dimensions.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}llcc@{}}
+\toprule
+Judge & Dim. & MAE & Mean bias \\
+\midrule
+\multirow{4}{*}{GPT-OSS-20B} & Coh. & 0.87 & $+0.81$ \\
+ & Con. & 0.79 & $+0.27$ \\
+ & Flu. & 0.57 & $+0.31$ \\
+ & Rel. & 0.70 & $-0.63$ \\
+\midrule
+\multirow{4}{*}{Qwen3-32B} & Coh. & 1.79 & $+1.79$ \\
+ & Con. & 1.59 & $+1.57$ \\
+ & Flu. & 1.31 & $+1.31$ \\
+ & Rel. & 0.53 & $-0.32$ \\
+\bottomrule
+\end{tabular}
+\caption{Calibration vs.\ human gold (direct scores, standard, no reference; $n{=}100$ per cell). Mean bias $=$ mean(judge $-$ human).}
+\label{tab:mae}
+\end{table}
+
+\subsection{Rubric mode vs.\ humans and vs.\ direct scoring}
+Rubric-based calls score all four dimensions in one generation step. Table~\ref{tab:rubric} shows Spearman $\rho$ between rubric outputs and human means under the same no-reference, \emph{standard} prompt setting. GPT-OSS-20B loses only modestly relative to direct scoring (e.g., coherence 0.80 vs.\ 0.84); Qwen3-32B degrades more on coherence and consistency but remains strong on relevance (0.81). For both judges, rubric and direct scores on the same summary--dimension are highly rank-correlated (Spearman $\rho$ between 0.80 and 0.93), so the two elicitation styles largely agree with each other even when they drift from humans.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Judge & Coh. & Con. & Flu. & Rel. \\
+\midrule
+GPT-OSS-20B & 0.798 & 0.616 & 0.721 & 0.797 \\
+Qwen3-32B & 0.543 & 0.494 & 0.544 & 0.806 \\
+\bottomrule
+\end{tabular}
+\caption{Rubric-mode Spearman $\rho$ vs.\ human gold (standard, no reference).}
+\label{tab:rubric}
+\end{table}
+
+\subsection{Inter-judge agreement}
+We also measure agreement \emph{between} the two judges by correlating their direct scores on identical summary--dimension pairs. Spearman $\rho$ is 0.76 on relevance, 0.65 on fluency, 0.57 on coherence, but only 0.31 on consistency (all $p{<}0.001$). Judges therefore disagree most on the same dimension where each is least aligned with humans, which complicates using a single API judge as a stand-in for community judgment.
+
+\subsection{Sensitivity of consistency correlation to prompt wording}
+Table~\ref{tab:promptcons} fixes the dimension to consistency and varies only the prompt family (minimal, standard, cot), still without reference. GPT-OSS-20B's $\rho$ swings from 0.76 (minimal) down to 0.64 (standard) and back to 0.76 (cot); Qwen3-32B moves between 0.57 and 0.67. A single ``best'' prompt is not obvious, but the spread shows that measured human alignment for faithfulness is not stable under modest instruction changes.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Judge & Min. & Std. & CoT \\
+\midrule
+GPT-OSS-20B & 0.759 & 0.638 & 0.763 \\
+Qwen3-32B & 0.674 & 0.569 & 0.630 \\
+\bottomrule
+\end{tabular}
+\caption{Spearman $\rho$ (consistency dimension only) vs.\ human gold across prompt variants, no reference.}
+\label{tab:promptcons}
+\end{table}
 
 \paragraph{Pairwise agreement with humans.}
 For each article we define a human preference by comparing the mean of the four human dimension scores for summary~A vs.\ summary~B. On 49 articles with a strict preference (one tie on mean scores), GPT-OSS-20B's pairwise winner under the standard no-reference A$\rightarrow$B setting matches the human preference in 40 cases (81.6\%); Qwen3-32B in 38 (77.6\%). Thus head-to-head agreement is respectable but not sufficient for unattended use.
@@ -165,7 +247,29 @@ Prompt & Largest std.\ of $\rho$ across wording variants on consistency ($>$0.04
 \section{Adversarial Evaluation}
 \label{sec:adversarial}
 
-We construct ten adversarial summaries with \textbf{Gemini~2.5 Flash}, starting from fluent Llama-generated references: four \emph{fluent inconsistent} rewrites (subtle factual errors), three \emph{correct but poorly written} rewrites, and three \emph{meaning-shift} paraphrases. Direct scoring on \emph{consistency} shows large mean drops vs.\ the good summary for both judges on fluent-inconsistent and meaning-shift types (e.g., GPT-OSS-20B: adversarial means 2.0 vs.\ 4.0 on fluent-inconsistent; deltas roughly $-1$ to $-2$ points on a 1--5 scale). Matched Wilcoxon tests are often not significant given $n{\in}\{3,4\}$ per type, so we emphasize effect direction and pairwise behavior.
+We construct ten adversarial summaries with \textbf{Gemini~2.5 Flash}, starting from fluent Llama-generated references: four \emph{fluent inconsistent} rewrites (subtle factual errors), three \emph{correct but poorly written} rewrites, and three \emph{meaning-shift} paraphrases. Table~\ref{tab:advdir} summarizes mean \emph{consistency} scores on the good vs.\ adversarial text under direct evaluation (standard prompts). Mean scores drop by about one to two points on fluent-inconsistent and meaning-shift families, while correct-but-poorly-written summaries retain middling consistency (the factual content is preserved but style is degraded). The ``Fool.'' column is the fraction of items within a type where the adversarial consistency score is at least as high as the good summary's score (i.e., the judge does not numerically separate them on that dimension). Matched Wilcoxon $p$-values on these small groups are often above 0.05, so we rely jointly on means, fooling rate, and pairwise win rates below.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+Type & Judge & $\mu_{\mathrm{good}}$ & $\mu_{\mathrm{adv}}$ & $\Delta$ & Fool.\ \\
+\midrule
+\multirow{2}{*}{Fluent inc.} & GPT-OSS-20B & 4.00 & 2.00 & $-2.00$ & 0.25 \\
+ & Qwen3-32B & 4.25 & 2.50 & $-1.75$ & 0.00 \\
+\midrule
+\multirow{2}{*}{Poor style} & GPT-OSS-20B & 4.33 & 3.00 & $-1.33$ & 0.00 \\
+ & Qwen3-32B & 4.00 & 3.00 & $-1.00$ & 0.33 \\
+\midrule
+\multirow{2}{*}{Mean.\ shift} & GPT-OSS-20B & 4.33 & 2.67 & $-1.67$ & 0.00 \\
+ & Qwen3-32B & 3.67 & 2.67 & $-1.00$ & 0.00 \\
+\bottomrule
+\end{tabular}
+\caption{Adversarial probe means on \emph{consistency} (direct scores; $n{=}4$ fluent-inconsistent, $n{=}3$ others per judge). $\Delta{=}\mu_{\mathrm{adv}}{-}\mu_{\mathrm{good}}$. Fool.\ $=$ share with adversarial score $\geq$ good score.}
+\label{tab:advdir}
+\end{table}
 
 In head-to-head pairwise evaluation (adversarial vs.\ good), Figure~\ref{fig:adv} shows that adversarial summaries sometimes win despite factual defects: fluent-inconsistent probes reach 50\% and 75\% adversarial win rates for GPT-OSS-20B and Qwen3-32B respectively; correct-but-poorly-written probes win 0\% vs.\ 33\%; meaning-shift probes win 33\% vs.\ 0\%. Qwen3-32B is especially permissive on fluent inconsistent text, consistent with weaker consistency correlation on the main benchmark.
 
@@ -177,19 +281,40 @@ In head-to-head pairwise evaluation (adversarial vs.\ good), Figure~\ref{fig:adv
 \end{figure}
 
 \section{Failure Taxonomy}
+\label{sec:fail}
 
-We categorize large judge--human discrepancies ($\geq$1.5 points on the Likert scale) into interpretable modes: over-trusting fluency, ignoring factual errors, penalizing correct but awkward text, score inflation/deflation, position-linked reversals, and dimension conflation (near-identical scores across dimensions). Qwen3-32B triggers many more inflation and ``ignoring factual errors'' flags than GPT-OSS-20B, while both share similar position-reversal counts; dimension conflation affects 11\% vs.\ 16\% of scored tuples. These counts operationalize qualitative failure modes beyond a single correlation coefficient.
+We categorize large judge--human discrepancies ($\geq$1.5 points on the Likert scale) into interpretable modes: over-trusting fluency, ignoring factual errors, penalizing correct but awkward text, score inflation/deflation, position-linked reversals, and dimension conflation (near-identical scores across dimensions). Table~\ref{tab:fail} counts how often each mode fires for each judge (tags are not mutually exclusive within the same scored item). Qwen3-32B accumulates far more inflation and ``ignoring factual errors'' events than GPT-OSS-20B, echoing the MAE bias in Table~\ref{tab:mae}. Both judges share the same number of position-linked reversal tags (14), matching the 28\% strict reversal rate in pairwise evaluation. Dimension conflation---assigning nearly identical scores across all four dimensions---occurs on 11\% vs.\ 16\% of tuples (GPT-OSS-20B vs.\ Qwen3-32B), suggesting the latter sometimes collapses the rubric instead of spreading mass across constructs.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Failure mode & GPT-OSS-20B & Qwen3-32B \\
+\midrule
+Ignoring factual errors & 13 & 51 \\
+Score inflation & 27 & 149 \\
+Score deflation & 12 & 3 \\
+Over-trusting fluency & 2 & 14 \\
+Position-dependent reversal & 14 & 14 \\
+Dimension conflation (count) & 11 & 16 \\
+\bottomrule
+\end{tabular}
+\caption{Rule-based failure tags (non-exclusive counts over scored tuples; see Section~\ref{sec:fail} for definitions).}
+\label{tab:fail}
+\end{table}
 
 \section{Discussion: Critical Questions}
 
 \paragraph{(1) When do LLM judges align with humans?}
-Alignment is strongest when the construct is easy to read off the summary and article together---relevance and coherence for GPT-OSS-20B ($\rho{\approx}0.84$--0.87), with fluency close behind. Consistency remains materially lower for both judges, and Qwen3-32B degrades further on coherence and fluency. Pairwise decisions match human majority preference on roughly four out of five decidable articles, but only when order effects do not dominate.
+Alignment is strongest when the construct is easy to read off the summary and article together---relevance and coherence for GPT-OSS-20B ($\rho{\approx}0.84$--0.87), with fluency close behind. Consistency remains materially lower for both judges, and Qwen3-32B degrades further on coherence and fluency. Rank metrics are mirrored by calibration: Qwen3-32B inflates coherence--fluency scores by roughly 1.3--1.8 Likert points on average versus humans (Table~\ref{tab:mae}), whereas GPT-OSS-20B's mean absolute errors stay near or below one point on every dimension with smaller signed bias. Rubric mode preserves the same qualitative gap (Table~\ref{tab:rubric}). Pairwise decisions match human majority preference on roughly four out of five decidable articles, but only when order effects do not dominate.
 
 \paragraph{(2) Where do they fail and why?}
-Failures concentrate on (i) underestimating subtle inconsistency while surface form stays fluent, as seen in adversarial pairwise rates, (ii) systematic score inflation relative to humans, and (iii) presentation-dependent pairwise reversals. Together, these indicate that judges partially substitute fluency and length-invariant heuristics for careful source cross-checking.
+Failures concentrate on (i) underestimating subtle inconsistency while surface form stays fluent, as seen in adversarial pairwise rates, (ii) systematic score inflation relative to humans, and (iii) presentation-dependent pairwise reversals. The two judges also disagree most on consistency scores ($\rho{\approx}0.31$ between judges vs.\ ${>}0.56$ on other dimensions), so ``ground truth'' from a single API judge would be unstable precisely where faithfulness matters. Together, these patterns indicate that judges partially substitute fluency and length-invariant heuristics for careful source cross-checking.
 
 \paragraph{(3) Internal consistency.}
-Direct, rubric, and pairwise modes are designed to measure the same construct at different granularities; our headline metrics use direct scores for correlation (clean per-dimension signal) and pairwise for order-sensitivity. In practice, rubric calls bundle dimensions in one generation step, which can reduce independence across dimensions---consistent with non-trivial conflation rates.
+Direct, rubric, and pairwise modes are designed to measure the same construct at different granularities; our headline metrics use direct scores for correlation (clean per-dimension signal) and pairwise for order-sensitivity. Direct and rubric scores are nonetheless tightly rank-coupled within each judge ($\rho{\geq}0.80$ on every dimension), so protocol choice mostly shifts absolute levels and human alignment rather than inducing unrelated rankings. Rubric calls still bundle dimensions in one generation step, which can reduce independence across dimensions---consistent with non-trivial conflation rates (Table~\ref{tab:fail}).
 
 \paragraph{(4) Prompt sensitivity.}
 Consistency correlation moves by several hundredths of a point across minimal, standard, and cot variants (std.\ ${\sim}0.04$--0.06), larger than for relevance. Reference inclusion helps consistency alignment slightly, supporting the use of reference text when faithfulness is paramount.
@@ -199,7 +324,7 @@ Not as a sole gatekeeper for research-quality summarization evaluation: while ag
 
 \section{Conclusion}
 
-We hypothesized dimension-specific judge weakness and found it: consistency with the source trails other SummEval dimensions under Spearman correlation for two modern API judges, with Qwen3-32B showing a larger gap and more inflation-style errors. Pairwise agreement with humans is moderate-to-good on aggregate yet undermined by order sensitivity; adversarial probes further show that fluent inaccuracies can win head-to-head. These results support using LLM judges as \emph{assistive} tools with explicit bias checks, not drop-in replacements for human rubrics.
+We hypothesized dimension-specific judge weakness and found it: consistency with the source trails other SummEval dimensions under Spearman correlation for two modern API judges, with Qwen3-32B showing a larger gap and more inflation-style errors. Mean-absolute-error and failure-tag analyses corroborate systematic leniency for Qwen3-32B and tighter calibration for GPT-OSS-20B, while inter-judge agreement is weakest exactly on consistency ($\rho{\approx}0.31$). Pairwise agreement with humans is moderate-to-good on aggregate yet undermined by order sensitivity; adversarial probes further show that fluent inaccuracies can win head-to-head. These results support using LLM judges as \emph{assistive} tools with explicit bias checks, not drop-in replacements for human rubrics.
 
 \section*{Limitations}
 
