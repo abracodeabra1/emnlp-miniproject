@@ -1,5 +1,7 @@
 % EMNLP 2023 style; pdfLaTeX recommended.
 \pdfoutput=1
+% Allow line breaks in long \url{...} (footnotes, etc.); must precede hyperref/url load.
+\PassOptionsToPackage{hyphens}{url}
 
 \documentclass[11pt]{article}
 
@@ -14,14 +16,14 @@
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
-\usepackage{url}
 
-\graphicspath{{../results/figures/}}
+% Figures: ship PDFs under report/figures/ for builds where ../results/ is absent (e.g.\ clean clone).
+\graphicspath{{./figures/}{../results/figures/}}
 
 \title{Dimension-Specific Reliability of LLM Judges:\\
   A Controlled Summarization Study with Human Gold}
 
-\author{Abraham Paul Elenjical\thanks{Code and data: \url{https://github.com/abracodeabra1/emnlp-miniproject}} \\
+\author{Abraham Paul Elenjical\thanks{Code and data: \url{https://github.com/abracodeabra1/emnlp-miniproject}.} \\
   Roll No.\ 2022114007 \\
   Evaluation Methods in NLP (2026)}
 
@@ -76,16 +78,17 @@ Table~\ref{tab:iaa} reports Krippendorff's $\alpha$ and the mean pairwise Cohen'
 
 \begin{table}[t]
 \centering
-\small
-\begin{tabular}{lcccc}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-& Coherence & Consistency & Fluency & Relevance \\
+ & Coh. & Con. & Flu. & Rel. \\
 \midrule
-Krippendorff $\alpha$ & 0.878 & 0.615 & 0.893 & 0.888 \\
-Cohen $\kappa$ (mean pair) & 0.882 & 0.642 & 0.888 & 0.886 \\
+Kripp.\ $\alpha$ & 0.878 & 0.615 & 0.893 & 0.888 \\
+Mean $\kappa$ & 0.882 & 0.642 & 0.888 & 0.886 \\
 \bottomrule
 \end{tabular}
-\caption{Inter-annotator agreement on the study subset ($n{=}50$ articles, three annotators).}
+\caption{Inter-annotator agreement on the study subset ($n{=}50$ articles, three annotators). Kripp.\ $=$ Krippendorff; $\kappa$ $=$ Cohen's $\kappa$ (mean pairwise).}
 \label{tab:iaa}
 \end{table}
 
