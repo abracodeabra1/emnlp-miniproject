@@ -5,8 +5,9 @@ CNN/DailyMail via HuggingFace datasets.
 
 Run: python src/download_data.py
 Output:
-  data/raw/articles.json       -- 50 CNN/DM articles
-  data/raw/summeval_human.json -- SummEval human annotations (fallback)
+  data/raw/articles_100.json    -- 100 CNN/DM articles (SummEval pool)
+  data/raw/articles_50.json     -- 50-article study subset
+  data/raw/summeval_human.json  -- SummEval human annotations (fallback gold)
 """
 
 import json

@@ -2,8 +2,8 @@
 # Master pipeline: run all steps in order.
 #
 # Required environment variables:
-#   GEMINI_API_KEY — adversarial generation + Gemini judge
-#   GROQ_API_KEY   — prometheus / judgelm / llama judges (Groq API)
+#   GEMINI_API_KEY — adversarial generation only (create_adversarial.py)
+#   GROQ_API_KEY   — Groq judges: prometheus (gpt-oss-20b), judgelm (qwen3-32b), llama (70b)
 #
 # HF_HOME / HF_DATASETS_CACHE are set below to /scratch/abraham/transformers_cache
 # (same as interactive runs on the cluster).

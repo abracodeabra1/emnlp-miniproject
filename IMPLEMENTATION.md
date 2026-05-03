@@ -22,12 +22,12 @@ Both run in **fp16** (transformers or vLLM). They are small, comparable instruct
 ### Judge Models (Part 3 + Part 8 extension)
 All judges below are **API-only** (no local model weights).
 
-| Judge id | Backend | Model ID | Notes |
+| Judge id | Backend | API `model` id | Notes |
 |---|---|---|---|
 | `nvidia` | [NVIDIA NIM](https://build.nvidia.com/models) (OpenAI-compatible) | Default **two** models: `minimaxai/minimax-m2.7`, `moonshotai/kimi-k2-thinking` (override with `NVIDIA_JUDGE_MODELS` comma-separated, or a single `NVIDIA_JUDGE_MODEL`) | Set `NVIDIA_API_KEY`; optional `NVIDIA_MAX_REQUESTS_PER_MINUTE` (default 30). JSONL `judge` is `nvidia/<model id>`. |
-| `prometheus` | Groq | `llama-3.1-8b-instant` | Set `GROQ_API_KEY` |
-| `judgelm` | Groq | `openai/gpt-oss-20b` | Set `GROQ_API_KEY` |
-| `llama` | Groq | `llama-3.3-70b-versatile` | Set `GROQ_API_KEY`; strong general judge vs. small system Llama |
+| `prometheus` | Groq | `openai/gpt-oss-20b` | Logical experiment label only (not the Prometheus-2 weights). Set `GROQ_API_KEY`. |
+| `judgelm` | Groq | `qwen/qwen3-32b` | Logical experiment label only (not the JudgeLM fine-tune). Set `GROQ_API_KEY`. |
+| `llama` | Groq | `llama-3.3-70b-versatile` | Strong general judge vs. small system Llama. Set `GROQ_API_KEY`. |
 
 Groq’s free/developer tier is **request- and token-limited** (on the order of ~1k requests/day depending on plan); scale `run_experiments.py` batches or split runs across days if you hit 429s (the client retries with backoff).
 
@@ -105,7 +105,7 @@ export HF_HOME=/scratch/abraham/transformers_cache
 export HF_DATASETS_CACHE=/scratch/abraham/transformers_cache
 export GEMINI_API_KEY=...     # adversarial generation only (`create_adversarial.py`)
 export NVIDIA_API_KEY=...    # frontier judge (`--judges nvidia`); see https://build.nvidia.com/models
-export GROQ_API_KEY=...       # prometheus / judgelm / llama judges
+export GROQ_API_KEY=...       # prometheus (gpt-oss-20b), judgelm (qwen3-32b), llama judges
 # On GPU machine (optional, for faster system output generation): pip install vllm
 ```
 
@@ -131,7 +131,7 @@ Generates summaries for 50 articles × 2 models = 100 summaries. Saves to `data/
 ```bash
 python src/create_adversarial.py
 ```
-Uses GPT-4o to create 10 adversarial summaries in 3 categories (see Part 5 below). Saves to `data/adversarial/`.
+Uses Gemini 2.5 Flash to create 10 adversarial summaries in 3 categories (see Part 5 below). Saves to `data/adversarial/`.
 
 ### Step 4 — Human Annotation
 Each of the 3 annotators runs the Flask app independently:
@@ -201,7 +201,7 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 | `with_reference` | Include CNN/DM highlights as anchor |
 | `no_reference` | No reference provided |
 
-**Total inference calls**: thousands of HTTP calls to **Gemini** and **Groq** (no local judge inference).
+**Total judge inference calls**: thousands of HTTP calls to **NVIDIA NIM** and **Groq** (no local judge weights). **Gemini** is used only for adversarial example generation (`create_adversarial.py`), not as a judge.
 
 ### Part 4: Bias Analysis
 
@@ -215,7 +215,7 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 
 ### Part 5: Adversarial Examples
 
-10 examples across 3 types (generated via GPT-4o from good Llama summaries):
+10 examples across 3 types (generated via Gemini 2.5 Flash from good Llama summaries):
 
 | Type | Count | Description |
 |---|---|---|
@@ -245,8 +245,8 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 | Wang et al. 2024 — ACL ([arXiv:2305.17926](https://arxiv.org/abs/2305.17926)) | Position bias methodology; our BPC analysis replicates this |
 | Liu et al. 2023 — G-Eval, EMNLP ([arXiv:2303.16634](https://arxiv.org/abs/2303.16634)) | Same task (summarization), CoT evaluation; direct comparison point |
 | Fabbri et al. 2021 — SummEval, TACL | Dataset; use their IAA as a benchmark for our annotation quality |
-| Kim et al. 2024 — Prometheus-2 ([arXiv:2405.01535](https://arxiv.org/abs/2405.01535)) | Primary specialized judge model |
-| Zeng et al. 2023 — JudgeLM, ICLR 2025 | Second specialized judge model |
+| Kim et al. 2024 — Prometheus-2 ([arXiv:2405.01535](https://arxiv.org/abs/2405.01535)) | Related work on specialist evaluators; our `prometheus` slot is Groq `openai/gpt-oss-20b` |
+| Zhu et al. 2024 — JudgeLM ([arXiv:2310.17631](https://arxiv.org/abs/2310.17631)) | Related work on judge LMs; our `judgelm` slot is Groq `qwen/qwen3-32b` |
 | Dubois et al. 2024 — AlpacaEval 2 | Length-bias correction methodology |
 | Survey ([arXiv:2411.15594](https://arxiv.org/abs/2411.15594)) | Background and bias taxonomy |
 
@@ -255,7 +255,7 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 ## Expected Key Findings
 
 1. **Dimension gap**: Spearman ρ with human gold will be notably higher on `fluency`/`coherence` than `consistency` across all judges, because consistency requires source-grounded fact verification.
-2. **Position bias**: All judges show measurable position bias; smaller open-source judges (JudgeLM, Prometheus) show stronger bias than GPT-4o.
+2. **Position bias**: All judges show measurable position bias.
 3. **Self-preference**: Llama judge will show elevated win rate for Llama-generated summaries vs other judges.
 4. **CoT helps consistency**: The `cot` prompt variant will improve Spearman ρ on `consistency` most (rubric + reasoning forces the judge to compare to source).
 5. **Adversarial vulnerability**: Judges will prefer `fluent_inconsistent` over `correct_poorly_written` at a measurable rate, especially for `judgelm` and `llama` (general) judges.
@@ -268,7 +268,7 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 |---|---|---|
 | 1 | Apr 27 | ✅ Env setup, data download, all source files written |
 | 2 | Apr 28 | Generate system outputs + adversarial examples; deploy annotation app |
-| 3 | Apr 29 | Complete annotation; compute IAA; run GPT-4o experiments |
+| 3 | Apr 29 | Complete annotation; compute IAA; run NVIDIA + Groq judge experiments |
 | 4 | Apr 30 | Run open-source judge experiments; prompt sensitivity analysis |
 | 5 | May 1 | Meta-eval, adversarial analysis, failure taxonomy; start report |
 | 6 | May 2 | Finish report (6–8 pages, EMNLP style); clean code + appendix |

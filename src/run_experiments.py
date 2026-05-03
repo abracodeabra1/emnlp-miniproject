@@ -1,6 +1,10 @@
 """
 Master experiment runner. Executes all LLM judge experiments and saves results.
 
+Groq logical judge ids (see src/judge.py): prometheus → openai/gpt-oss-20b,
+judgelm → qwen/qwen3-32b, llama → llama-3.3-70b-versatile. NVIDIA NIM judges
+use `nvidia/<NIM model id>` per configured default or env overrides.
+
 Experiments:
   A) Direct scoring: all judges × all pairs × all dimensions × 3 prompt variants × with/without ref
   B) Pairwise: all judges × all pairs × 3 variants × A/B + B/A orderings
@@ -158,7 +162,13 @@ def run_rubric(judges, pairs):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description=(
+            "LLM judge experiments: NVIDIA NIM (--judges nvidia) and/or Groq "
+            "(prometheus=gpt-oss-20b, judgelm=qwen3-32b, llama=70b). "
+            "See src/judge.py for API model ids."
+        ),
+    )
     parser.add_argument("--judges", nargs="+", default=ALL_JUDGES, choices=ALL_JUDGES)
     parser.add_argument("--mode", choices=["direct", "pairwise", "rubric", "all"], default="all")
     parser.add_argument(

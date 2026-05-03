@@ -15,10 +15,10 @@ pip install -r requirements.txt
 export HF_HOME=/scratch/abraham/transformers_cache
 export HF_DATASETS_CACHE=/scratch/abraham/transformers_cache
 
-# Gemini: adversarial generation only. NVIDIA: frontier judge (NIM). Groq: prometheus / judgelm / llama.
+# Gemini: adversarial generation only. NVIDIA: frontier judge (NIM). Groq: prometheus=gpt-oss-20b, judgelm=qwen3-32b, llama=70b.
 export GEMINI_API_KEY=AIza...
 export NVIDIA_API_KEY=nvapi-...   # https://build.nvidia.com/models — optional: NVIDIA_MAX_REQUESTS_PER_MINUTE=30
-export GROQ_API_KEY=gsk_...   # https://console.groq.com/ — for prometheus / judgelm / llama judges
+export GROQ_API_KEY=gsk_...   # https://console.groq.com/ — judges: prometheus (openai/gpt-oss-20b), judgelm (qwen/qwen3-32b), llama
 ```
 
 ---

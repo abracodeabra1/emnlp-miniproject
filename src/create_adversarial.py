@@ -4,7 +4,7 @@ Create 10 adversarial examples in 3 categories:
   2. Correct but poorly written (3 examples) -- extractive + errors
   3. Paraphrase with meaning shift (3 examples) -- subtle claim inversion
 
-Uses GPT-4o to generate adversarial variants of existing good summaries.
+Uses Gemini 2.5 flash to generate adversarial variants of existing good summaries.
 
 Usage:
   python src/create_adversarial.py

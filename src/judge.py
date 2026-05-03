@@ -53,13 +53,21 @@ from src.prompts import (
 )
 
 # GroqCloud production model IDs (OpenAI-compatible chat completions).
-# Logical names (prometheus / judgelm) map to Groq IDs — there are no models named
-# "prometheus" or "JudgeLM" on Groq; these slots are fixed backbones for experiments.
+# Logical names map to Groq production IDs (not the Prometheus-2 / JudgeLM fine-tunes).
 GROQ_JUDGE_MODELS = {
     "prometheus": "openai/gpt-oss-20b",
     "judgelm": "qwen/qwen3-32b",
     "llama": "llama-3.3-70b-versatile",
 }
+
+# JSONL `judge` keys for the two Groq specialist backbones (figures use API ids below).
+FIGURE_GROQ_JUDGE_KEYS: tuple[str, ...] = ("prometheus", "judgelm")
+
+
+def judge_figure_label(judge_key: str) -> str:
+    """Axis / legend text for plots: Groq slots use API model id, not logical keys."""
+    return GROQ_JUDGE_MODELS.get(judge_key, judge_key)
+
 
 # Defaults slightly under https://console.groq.com/docs/rate-limits (Developer table;
 # your org may differ — tune with GROQ_MAX_* env vars).
@@ -432,8 +440,9 @@ class _NvidiaJudge:
 class Judge:
     def __init__(self, judge_name: str):
         """
-        judge_name: one of 'prometheus', 'judgelm', 'llama', or 'nvidia/<NIM model id>'
-        (e.g. 'nvidia/minimaxai/minimax-m2.7'). Use expand_judge_names() for CLI `nvidia`.
+        judge_name: one of 'prometheus' (Groq openai/gpt-oss-20b), 'judgelm' (Groq qwen/qwen3-32b),
+        'llama' (Groq llama-3.3-70b-versatile), or 'nvidia/<NIM model id>' (e.g. nvidia/minimaxai/minimax-m2.7).
+        Use expand_judge_names() for CLI `nvidia`.
         """
         self.name = judge_name
         if judge_name.startswith(_NVIDIA_PREFIX):

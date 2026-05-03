@@ -24,7 +24,6 @@ JUDGES = [
     "nvidia/minimaxai/minimax-m2.7",
     "nvidia/moonshotai/kimi-k2-thinking",
     "nvidia",
-    "gemini",
     "prometheus",
     "judgelm",
     "llama",

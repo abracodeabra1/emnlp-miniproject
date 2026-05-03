@@ -4,10 +4,11 @@ Identifies examples where LLM judges diverge from human gold and categorizes why
 
 Output:
   results/failure_taxonomy.json
-  results/figures/failure_breakdown.pdf
+  results/figures/failure_breakdown.pdf/.png (stacked bars: openai/gpt-oss-20b and qwen/qwen3-32b only)
 """
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -16,11 +17,15 @@ import pandas as pd
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 DATA_DIR = Path(__file__).parent.parent / "data"
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from src.judge import FIGURE_GROQ_JUDGE_KEYS, judge_figure_label  # noqa: E402
+
 JUDGES = [
     "nvidia/minimaxai/minimax-m2.7",
     "nvidia/moonshotai/kimi-k2-thinking",
     "nvidia",
-    "gemini",
     "prometheus",
     "judgelm",
     "llama",
@@ -218,13 +223,15 @@ def main():
         import matplotlib.pyplot as plt
 
         modes = list({m for j in failure_counts.values() for m in j})
-        judges = JUDGES
-        data = {m: [failure_counts[j].get(m, 0) for j in judges] for m in modes}
-        df = pd.DataFrame(data, index=judges)
-        ax = df.plot(kind="bar", stacked=True, figsize=(10, 5))
-        ax.set_title("Failure Modes by Judge")
-        ax.set_xlabel("Judge")
+        plot_keys = list(FIGURE_GROQ_JUDGE_KEYS)
+        plot_labels = [judge_figure_label(j) for j in plot_keys]
+        data = {m: [failure_counts[j].get(m, 0) for j in plot_keys] for m in modes}
+        df = pd.DataFrame(data, index=plot_labels)
+        ax = df.plot(kind="bar", stacked=True, figsize=(7, 5))
+        ax.set_title("Failure modes by Groq judge model")
+        ax.set_xlabel("Groq model")
         ax.set_ylabel("Count")
+        plt.setp(ax.get_xticklabels(), rotation=12, ha="right", fontsize=8)
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
         plt.tight_layout()
         fig_dir = RESULTS_DIR / "figures"

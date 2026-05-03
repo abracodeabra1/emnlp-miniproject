@@ -11,10 +11,11 @@ Input:
 
 Output:
   results/meta_eval_report.json
-  results/figures/  (correlation heatmaps, bias plots)
+  results/figures/  — correlation heatmap + position bias (only openai/gpt-oss-20b and qwen/qwen3-32b)
 """
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -26,13 +27,17 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 FIG_DIR = RESULTS_DIR / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from src.judge import FIGURE_GROQ_JUDGE_KEYS, judge_figure_label  # noqa: E402
+
 DIMENSIONS = ["coherence", "consistency", "fluency", "relevance"]
-# "gemini" / bare "nvidia" for older JSONL; new NVIDIA runs use nvidia/<NIM model id>.
+# Bare "nvidia" matches older JSONL; current runs use nvidia/<NIM model id>.
 JUDGES = [
     "nvidia/minimaxai/minimax-m2.7",
     "nvidia/moonshotai/kimi-k2-thinking",
     "nvidia",
-    "gemini",
     "prometheus",
     "judgelm",
     "llama",
@@ -298,18 +303,20 @@ def plot_correlation_heatmap(corr_report: dict):
         import seaborn as sns
 
         data = {}
-        for judge in JUDGES:
-            data[judge] = {}
+        for judge_key in FIGURE_GROQ_JUDGE_KEYS:
+            label = judge_figure_label(judge_key)
+            data[label] = {}
             for dim in DIMENSIONS:
-                val = corr_report.get(judge, {}).get(dim, {}).get("spearman_rho", float("nan"))
-                data[judge][dim] = val
+                val = corr_report.get(judge_key, {}).get(dim, {}).get("spearman_rho", float("nan"))
+                data[label][dim] = val
 
         df = pd.DataFrame(data).T
-        fig, ax = plt.subplots(figsize=(7, 4))
+        fig, ax = plt.subplots(figsize=(8, 3.2))
         sns.heatmap(df, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap="RdYlGn", ax=ax)
-        ax.set_title("Spearman ρ: LLM Judge vs Human Gold (by dimension)")
+        ax.set_title("Spearman ρ vs human gold (Groq judge models)")
         ax.set_xlabel("Dimension")
-        ax.set_ylabel("Judge")
+        ax.set_ylabel("Groq model")
+        plt.setp(ax.get_yticklabels(), fontsize=8)
         plt.tight_layout()
         plt.savefig(FIG_DIR / "correlation_heatmap.pdf", dpi=150)
         plt.savefig(FIG_DIR / "correlation_heatmap.png", dpi=150)
@@ -323,15 +330,23 @@ def plot_position_bias(pos_report: dict):
     try:
         import matplotlib.pyplot as plt
 
-        judges = [j for j in JUDGES if j in pos_report]
-        bias_scores = [pos_report[j].get("position_bias_score", 0) for j in judges]
+        judges = []
+        bias_scores = []
+        for judge_key in FIGURE_GROQ_JUDGE_KEYS:
+            if judge_key not in pos_report:
+                continue
+            judges.append(judge_figure_label(judge_key))
+            bias_scores.append(pos_report[judge_key].get("position_bias_score") or 0.0)
 
-        fig, ax = plt.subplots(figsize=(6, 3))
-        bars = ax.bar(judges, bias_scores, color=["#e74c3c" if b > 0.1 else "#2ecc71" for b in bias_scores])
+        fig, ax = plt.subplots(figsize=(6, 3.4))
+        colors = ["#e74c3c" if b > 0.1 else "#2ecc71" for b in bias_scores]
+        ax.bar(judges, bias_scores, color=colors)
         ax.axhline(0.1, color="gray", linestyle="--", label="threshold (0.1)")
-        ax.set_ylabel("Position Bias Score (0=unbiased, 1=fully biased)")
-        ax.set_title("Position Bias by Judge")
+        ax.set_ylabel("Position bias score (0=unbiased, 1=fully biased)")
+        ax.set_title("Position bias (Groq judge models)")
+        ax.set_xlabel("Groq model")
         ax.set_ylim(0, 1)
+        plt.setp(ax.get_xticklabels(), rotation=12, ha="right", fontsize=8)
         ax.legend()
         plt.tight_layout()
         plt.savefig(FIG_DIR / "position_bias.pdf", dpi=150)
