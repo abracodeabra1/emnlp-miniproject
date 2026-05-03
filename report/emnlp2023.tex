@@ -14,6 +14,8 @@
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
 
 % Placeholders for numbers not yet finalized (fill from results/*.json).
 \newcommand{\TBD}[1]{\textcolor{red}{\textbf{[TBD: #1]}}}
@@ -116,8 +118,9 @@ Table~\ref{tab:bias} summarizes operational metrics implemented in code: positio
 
 \begin{table}[t]
 \centering
-\small
-\begin{tabular}{lp{5.8cm}}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}p{0.30\columnwidth} X@{}}
 \toprule
 Bias & Operationalization \\
 \midrule
@@ -125,9 +128,9 @@ Position & Compare first-slot win rate to 0.5; report $\chi^2$ where applicable.
 Verbosity & Spearman $r$ (score vs.\ word count) per dimension. \\
 Reference & $\Delta\rho$ (with vs.\ without reference). \\
 Self-preference & Win rate gap for same-family summaries (Llama judge vs.\ others). \\
-Prompt sensitivity & Std.\ dev.\ of $\rho$ across \texttt{minimal}/\texttt{standard}/\texttt{cot}. \\
+Prompt sensitivity & Std.\ dev.\ of $\rho$ across the three prompt variants (minimal, standard, cot). \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Bias analyses mirroring \citet{zheng2023judging,wang2024largebench,gu2024survey}.}
 \label{tab:bias}
 \end{table}
