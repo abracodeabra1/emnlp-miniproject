@@ -16,7 +16,15 @@ import pandas as pd
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 DATA_DIR = Path(__file__).parent.parent / "data"
 
-JUDGES = ["gemini", "prometheus", "judgelm", "llama"]
+JUDGES = [
+    "nvidia/minimaxai/minimax-m2.7",
+    "nvidia/moonshotai/kimi-k2-thinking",
+    "nvidia",
+    "gemini",
+    "prometheus",
+    "judgelm",
+    "llama",
+]
 DIMENSIONS = ["coherence", "consistency", "fluency", "relevance"]
 
 FAILURE_THRESHOLD = 1.5  # judge score differs from human gold by >= this
@@ -134,7 +142,7 @@ def analyze_dimension_conflation(direct_df: pd.DataFrame) -> dict:
         total = 0
 
         for art_id in j["article_id"].unique():
-            for model in ["llama", "mistral"]:
+            for model in ["llama", "qwen"]:
                 scores = []
                 for dim in DIMENSIONS:
                     row = j[(j["article_id"] == art_id) & (j["dimension"] == dim) & (j["summary_model"] == model)]

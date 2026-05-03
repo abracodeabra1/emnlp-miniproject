@@ -9,11 +9,16 @@
 ## Environment Setup (do once)
 
 ```bash
-conda activate emnlp
+conda activate fixed_res
 pip install -r requirements.txt
 
-# Only one API key is needed — for both judging and adversarial generation:
+export HF_HOME=/scratch/abraham/transformers_cache
+export HF_DATASETS_CACHE=/scratch/abraham/transformers_cache
+
+# Gemini: adversarial generation only. NVIDIA: frontier judge (NIM). Groq: prometheus / judgelm / llama.
 export GEMINI_API_KEY=AIza...
+export NVIDIA_API_KEY=nvapi-...   # https://build.nvidia.com/models — optional: NVIDIA_MAX_REQUESTS_PER_MINUTE=30
+export GROQ_API_KEY=gsk_...   # https://console.groq.com/ — for prometheus / judgelm / llama judges
 ```
 
 ---
@@ -39,10 +44,10 @@ python src/generate_outputs.py --backend transformers
 python src/generate_outputs.py --backend vllm
 ```
 
-**Needs**: GPU or Apple Silicon MPS (Llama-3.1-8B + Mistral-7B in fp16 need ~16 GB memory)  
+**Needs**: GPU or Apple Silicon MPS (Llama-3.2-1B + Qwen2.5-1.5B in fp16 need only a few GB)  
 **Produces**:
 - `data/system_outputs/llama_summaries.json`
-- `data/system_outputs/mistral_summaries.json`
+- `data/system_outputs/qwen_summaries.json`
 - `data/system_outputs/all_pairs.json`
 
 ---
@@ -93,20 +98,23 @@ python src/compute_iaa.py         # → results/iaa_report.json
 ### 4b — LLM judge experiments (start immediately in a separate terminal)
 
 ```bash
-# Gemini 2.5 Flash as the frontier judge (via API):
-python src/run_experiments.py --judges gemini --mode all --clear
+# NVIDIA frontier judge (needs NVIDIA_API_KEY; client throttles ~30 RPM by default):
+python src/run_experiments.py --judges nvidia --mode all --clear
 
-# If local models are available (Apple Silicon MPS or CUDA GPU):
+# Groq judges (needs GROQ_API_KEY) — no local GPU weights:
 python src/run_experiments.py --judges prometheus judgelm llama --mode all
+
+# Full sweep (NVIDIA + Groq):
+python src/run_experiments.py --judges nvidia prometheus judgelm llama --mode all --clear
 ```
 
-**Needs**: `all_pairs.json` (Step 2), `adversarial_examples.json` (Step 3), `GEMINI_API_KEY`  
+**Needs**: `all_pairs.json` (Step 2), `adversarial_examples.json` (Step 3), `NVIDIA_API_KEY`, `GROQ_API_KEY`  
 **Produces**:
-- `results/direct_scores.jsonl` (~2,400 entries for gemini alone)
+- `results/direct_scores.jsonl` (~2,400 entries per NVIDIA model × 2 default models unless you change `NVIDIA_JUDGE_MODELS`)
 - `results/pairwise_scores.jsonl` (~600 entries)
 - `results/rubric_scores.jsonl` (~400 entries)
 
-> **Note**: The Gemini judge run takes time (~2,400+ API calls). Use `--clear` only on first run to avoid duplicates. If interrupted, rerun **without** `--clear` to append remaining entries (no-op on already-done combos).
+> **Note**: Full runs issue thousands of API calls across NVIDIA NIM and Groq. The NVIDIA judge enforces a client-side requests-per-minute cap (see `NVIDIA_MAX_REQUESTS_PER_MINUTE`). Use `--clear` only on first run to avoid duplicates. If interrupted, rerun **without** `--clear` to append remaining entries. Groq free tier may return 429: the judge client retries with exponential backoff; spread work across days if limits persist.
 
 ---
 
@@ -159,9 +167,9 @@ create_adversarial (Step 3)
        │
        ├──────────────────────────────┐
        │                              │
-  [4a] Human annotation          [4b] Judge experiments
-  annotate_app × 3                run_experiments.py
-  merge_annotations.py            (gemini + local models)
+  [4a] Human annotation               [4b] Judge experiments
+  annotate_app × 3                     run_experiments.py
+  merge_annotations.py                 (NVIDIA + Groq judges)
   compute_iaa.py
        │                              │
   gold_standard.json         direct/pairwise/rubric_scores.jsonl

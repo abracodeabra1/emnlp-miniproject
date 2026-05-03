@@ -14,20 +14,24 @@ Do LLM judges fail uniformly, or is failure **dimension-specific**? The hypothes
 ### System Models (what gets judged)
 | Model | HuggingFace ID |
 |---|---|
-| Llama-3.1-8B-Instruct | `meta-llama/Meta-Llama-3.1-8B-Instruct` |
-| Mistral-7B-Instruct-v0.3 | `mistralai/Mistral-7B-Instruct-v0.3` |
+| Llama-3.2-1B-Instruct | `meta-llama/Llama-3.2-1B-Instruct` |
+| Qwen2.5-1.5B-Instruct | `Qwen/Qwen2.5-1.5B-Instruct` |
 
-These are intentionally comparable in capability to enable a fair evaluation study. Llama-3.1-8B is also used as a judge to study **self-preference bias**.
+Both run in **fp16** (transformers or vLLM). They are small, comparable instruct models for a lightweight pipeline.
 
 ### Judge Models (Part 3 + Part 8 extension)
-| Model | Type | HuggingFace ID | VRAM (INT4) |
-|---|---|---|---|
-| GPT-4o | Frontier (API) | OpenAI API | — |
-| Prometheus-2-7B | Specialized open-source | `prometheus-eval/prometheus-7b-v2.0` | ~5 GB |
-| JudgeLM-7B | Specialized open-source | `BAAI/JudgeLM-7B-v1.0` | ~8 GB |
-| Llama-3.1-8B-Instruct | General zero-shot | `meta-llama/Meta-Llama-3.1-8B-Instruct` | ~5 GB |
+All judges below are **API-only** (no local model weights).
 
-**Total local VRAM**: ~18 GB (comfortably within 44 GB budget).
+| Judge id | Backend | Model ID | Notes |
+|---|---|---|---|
+| `nvidia` | [NVIDIA NIM](https://build.nvidia.com/models) (OpenAI-compatible) | Default **two** models: `minimaxai/minimax-m2.7`, `moonshotai/kimi-k2-thinking` (override with `NVIDIA_JUDGE_MODELS` comma-separated, or a single `NVIDIA_JUDGE_MODEL`) | Set `NVIDIA_API_KEY`; optional `NVIDIA_MAX_REQUESTS_PER_MINUTE` (default 30). JSONL `judge` is `nvidia/<model id>`. |
+| `prometheus` | Groq | `llama-3.1-8b-instant` | Set `GROQ_API_KEY` |
+| `judgelm` | Groq | `openai/gpt-oss-20b` | Set `GROQ_API_KEY` |
+| `llama` | Groq | `llama-3.3-70b-versatile` | Set `GROQ_API_KEY`; strong general judge vs. small system Llama |
+
+Groq’s free/developer tier is **request- and token-limited** (on the order of ~1k requests/day depending on plan); scale `run_experiments.py` batches or split runs across days if you hit 429s (the client retries with backoff).
+
+The NVIDIA judge uses a **sliding-window requests-per-minute** limiter (default 30 RPM) before each call, plus retries on 429/503. Tune `NVIDIA_MAX_REQUESTS_PER_MINUTE` to match your NVIDIA account limits.
 
 ### Evaluation Dimensions
 All models are scored on four dimensions (1–5 Likert scale), matching SummEval:
@@ -51,8 +55,8 @@ miniproject/
 │   │   ├── articles_100.json         # Full 100-article pool
 │   │   └── summeval_human.json       # SummEval fallback annotations
 │   ├── system_outputs/
-│   │   ├── llama_summaries.json      # Llama-3.1-8B outputs
-│   │   ├── mistral_summaries.json    # Mistral-7B outputs
+│   │   ├── llama_summaries.json      # Llama-3.2-1B outputs
+│   │   ├── qwen_summaries.json       # Qwen2.5-1.5B outputs
 │   │   └── all_pairs.json            # Merged pairwise format
 │   ├── adversarial/
 │   │   └── adversarial_examples.json # 10 adversarial examples (3 types)
@@ -96,10 +100,16 @@ miniproject/
 
 ### Prerequisites
 ```bash
-conda activate emnlp
-export OPENAI_API_KEY=sk-...
-# On GPU machine: pip install vllm
+conda activate fixed_res
+export HF_HOME=/scratch/abraham/transformers_cache
+export HF_DATASETS_CACHE=/scratch/abraham/transformers_cache
+export GEMINI_API_KEY=...     # adversarial generation only (`create_adversarial.py`)
+export NVIDIA_API_KEY=...    # frontier judge (`--judges nvidia`); see https://build.nvidia.com/models
+export GROQ_API_KEY=...       # prometheus / judgelm / llama judges
+# On GPU machine (optional, for faster system output generation): pip install vllm
 ```
+
+Keep `HF_HOME` and `HF_DATASETS_CACHE` at `/scratch/abraham/transformers_cache` (do not point them at a repo-local `.cache`); the account needs write access to that directory.
 
 ### Step 1 — Download Data (done)
 ```bash
@@ -146,14 +156,11 @@ python src/build_summeval_fallback.py
 
 ### Step 5 — Run Judge Experiments
 ```bash
-# GPT-4o first (fast, via API):
-python src/run_experiments.py --judges gpt4o --mode all
-
-# Open-source judges (GPU machine):
-python src/run_experiments.py --judges prometheus judgelm llama --mode all
+# NVIDIA frontier judge + Groq judges (API keys only; no local judge weights):
+python src/run_experiments.py --judges nvidia prometheus judgelm llama --mode all
 
 # Or run a single mode:
-python src/run_experiments.py --judges gpt4o --mode direct
+python src/run_experiments.py --judges llama --mode direct
 ```
 
 ### Step 6 — Meta-Evaluation
@@ -194,7 +201,7 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 | `with_reference` | Include CNN/DM highlights as anchor |
 | `no_reference` | No reference provided |
 
-**Total inference calls**: ~3,600 (batched via vLLM for local models).
+**Total inference calls**: thousands of HTTP calls to **Gemini** and **Groq** (no local judge inference).
 
 ### Part 4: Bias Analysis
 
@@ -203,7 +210,7 @@ Each mode is run with 3 prompt variants and 2 reference conditions:
 | **Position bias** | Compare A→B vs B→A win rates; χ² test. Measure `position_bias_score = 2·|first_win_rate − 0.5|` |
 | **Verbosity bias** | Spearman r between summary word count and judge score per dimension |
 | **Reference bias** | Δ Spearman r (with ref vs without ref) per judge per dimension |
-| **Self-preference** | Llama judge win rate for Llama outputs vs Mistral outputs; compare to other judges |
+| **Self-preference** | Llama judge win rate for Llama outputs vs Qwen outputs; compare to other judges |
 | **Prompt sensitivity** | Std deviation of Spearman r across 3 prompt variants |
 
 ### Part 5: Adversarial Examples

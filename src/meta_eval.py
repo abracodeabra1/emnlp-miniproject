@@ -27,7 +27,16 @@ FIG_DIR = RESULTS_DIR / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 DIMENSIONS = ["coherence", "consistency", "fluency", "relevance"]
-JUDGES = ["gemini", "prometheus", "judgelm", "llama"]
+# "gemini" / bare "nvidia" for older JSONL; new NVIDIA runs use nvidia/<NIM model id>.
+JUDGES = [
+    "nvidia/minimaxai/minimax-m2.7",
+    "nvidia/moonshotai/kimi-k2-thinking",
+    "nvidia",
+    "gemini",
+    "prometheus",
+    "judgelm",
+    "llama",
+]
 
 
 # ─── Loaders ──────────────────────────────────────────────────────────────────
@@ -129,7 +138,7 @@ def position_bias_analysis(pairwise_df: pd.DataFrame) -> dict:
         first_wins = 0
         for art_id in common:
             ab_winner = ab.loc[art_id, "winner"]   # 'A' means llama won
-            ba_winner = ba.loc[art_id, "winner"]   # 'A' now means mistral (order flipped)
+            ba_winner = ba.loc[art_id, "winner"]   # 'A' now means qwen (order flipped)
 
             if ab_winner is None or ba_winner is None:
                 continue
@@ -227,7 +236,7 @@ def self_preference_analysis(pairwise_df: pd.DataFrame) -> dict:
 
     for judge in JUDGES:
         j_data = std[std["judge"] == judge]
-        # Count how often judge picks llama vs mistral outputs
+        # Count how often judge picks llama vs qwen outputs
         llama_wins = 0
         total = 0
         for _, row in j_data.iterrows():

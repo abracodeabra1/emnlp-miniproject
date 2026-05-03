@@ -100,8 +100,12 @@ DIMENSION_DESCS = [
 ]
 
 
-def load_queue():
-    """Build ordered list of (pair, summary_key) to annotate."""
+def load_queue(shuffle: bool = True):
+    """Build ordered list of (pair, summary_key) to annotate.
+
+    When shuffle=False, order is stable (pairs then adversarial, A then B);
+    use for offline tools that need the full item set without per-annotator permutations.
+    """
     pairs_path = DATA_DIR / "system_outputs" / "all_pairs.json"
     with open(pairs_path) as f:
         pairs = json.load(f)
@@ -133,8 +137,9 @@ def load_queue():
             queue.append((fake_pair_good, "summary_A"))
             queue.append((fake_pair_adv, "summary_A"))
 
-    random.seed(SEED)
-    random.shuffle(queue)
+    if shuffle:
+        random.seed(SEED)
+        random.shuffle(queue)
     return queue
 
 

@@ -20,7 +20,15 @@ from scipy.stats import wilcoxon
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 DATA_DIR = Path(__file__).parent.parent / "data"
 
-JUDGES = ["gemini", "prometheus", "judgelm", "llama"]
+JUDGES = [
+    "nvidia/minimaxai/minimax-m2.7",
+    "nvidia/moonshotai/kimi-k2-thinking",
+    "nvidia",
+    "gemini",
+    "prometheus",
+    "judgelm",
+    "llama",
+]
 ADV_TYPES = ["fluent_inconsistent", "correct_poorly_written", "meaning_shift"]
 
 

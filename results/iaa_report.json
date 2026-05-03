@@ -1,0 +1,38 @@
+{
+  "coherence": {
+    "krippendorff_alpha": 0.8781,
+    "cohen_kappa_pairs": {
+      "ann1_vs_ann2": 0.8808,
+      "ann1_vs_ann3": 0.8649,
+      "ann2_vs_ann3": 0.8997
+    },
+    "mean_cohen_kappa": 0.8818
+  },
+  "consistency": {
+    "krippendorff_alpha": 0.6147,
+    "cohen_kappa_pairs": {
+      "ann1_vs_ann2": 0.5822,
+      "ann1_vs_ann3": 0.5513,
+      "ann2_vs_ann3": 0.7926
+    },
+    "mean_cohen_kappa": 0.642
+  },
+  "fluency": {
+    "krippendorff_alpha": 0.8934,
+    "cohen_kappa_pairs": {
+      "ann1_vs_ann2": 0.8576,
+      "ann1_vs_ann3": 0.8785,
+      "ann2_vs_ann3": 0.9292
+    },
+    "mean_cohen_kappa": 0.8884
+  },
+  "relevance": {
+    "krippendorff_alpha": 0.8875,
+    "cohen_kappa_pairs": {
+      "ann1_vs_ann2": 0.8644,
+      "ann1_vs_ann3": 0.879,
+      "ann2_vs_ann3": 0.915
+    },
+    "mean_cohen_kappa": 0.8861
+  }
+}

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Master pipeline: run all steps in order.
 #
-# Required environment variable:
-#   GEMINI_API_KEY  — for both adversarial generation and LLM judge experiments
+# Required environment variables:
+#   GEMINI_API_KEY — adversarial generation + Gemini judge
+#   GROQ_API_KEY   — prometheus / judgelm / llama judges (Groq API)
+#
+# HF_HOME / HF_DATASETS_CACHE are set below to /scratch/abraham/transformers_cache
+# (same as interactive runs on the cluster).
 #
 # Usage: bash run_all.sh
 #
@@ -12,8 +16,15 @@
 set -e
 cd "$(dirname "$0")"
 
+export HF_HOME=/scratch/abraham/transformers_cache
+export HF_DATASETS_CACHE=/scratch/abraham/transformers_cache
+
 if [ -z "$GEMINI_API_KEY" ]; then
     echo "ERROR: GEMINI_API_KEY is not set. Export it before running."
+    exit 1
+fi
+if [ -z "$GROQ_API_KEY" ]; then
+    echo "ERROR: GROQ_API_KEY is not set. Export it for judge steps (https://console.groq.com/)."
     exit 1
 fi
 
@@ -21,8 +32,8 @@ fi
 echo "=== Step 1: Download data ==="
 python src/download_data.py
 
-# ── Step 2: Generate system outputs (Llama + Mistral summaries) ───────────────
-echo "=== Step 2: Generate system outputs (Llama + Mistral) ==="
+# ── Step 2: Generate system outputs (Llama + Qwen summaries) ────────────────────
+echo "=== Step 2: Generate system outputs (Llama + Qwen) ==="
 # Change --backend to vllm if running on a CUDA GPU server
 python src/generate_outputs.py --backend transformers
 
@@ -51,9 +62,8 @@ echo "         python src/merge_annotations.py"
 echo "         python src/compute_iaa.py"
 echo ""
 echo "  4b — LLM judge experiments (run in a separate terminal NOW):"
-echo "         python src/run_experiments.py --judges gemini --mode all --clear"
-echo "         # If local judges available (GPU / Apple Silicon MPS):"
-echo "         python src/run_experiments.py --judges prometheus judgelm llama --mode all"
+echo "         python src/run_experiments.py --judges nvidia prometheus judgelm llama --mode all --clear"
+echo "         # Requires NVIDIA_API_KEY and GROQ_API_KEY (no local judge weights). GEMINI_API_KEY only for Step 3."
 echo ""
 read -p "Press Enter once BOTH annotation (4a) AND judge experiments (4b) are complete..."
 

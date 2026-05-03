@@ -1,5 +1,5 @@
 """
-Generate summaries for 50 CNN/DM articles using two system models.
+Generate summaries for 50 CNN/DM articles using two system models (~1B, fp16).
 Designed to run on a machine with CUDA GPUs.
 
 Usage:
@@ -11,7 +11,7 @@ Usage:
 
 Output:
   data/system_outputs/llama_summaries.json
-  data/system_outputs/mistral_summaries.json
+  data/system_outputs/qwen_summaries.json
   data/system_outputs/all_pairs.json   -- combined for downstream use
 """
 
@@ -25,8 +25,8 @@ OUT_DIR = DATA_DIR / "system_outputs"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 MODELS = {
-    "llama": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "mistral": "mistralai/Mistral-7B-Instruct-v0.3",
+    "llama": "meta-llama/Llama-3.2-1B-Instruct",
+    "qwen": "Qwen/Qwen2.5-1.5B-Instruct",
 }
 
 SUMMARIZATION_PROMPT = (
@@ -39,6 +39,8 @@ SUMMARIZATION_PROMPT = (
 MAX_NEW_TOKENS = 200
 TEMPERATURE = 0.3  # slight diversity but mostly deterministic
 
+VLLM_MAX_MODEL_LEN = 8192
+
 
 def load_articles():
     path = RAW_DIR / "articles_50.json"
@@ -49,15 +51,20 @@ def load_articles():
 def generate_vllm(model_name: str, articles: list, label: str):
     from vllm import LLM, SamplingParams
 
-    print(f"Loading {model_name} with vLLM...")
-    llm = LLM(model=model_name, tensor_parallel_size=1, dtype="float16")
+    print(f"Loading {model_name} with vLLM (fp16)...")
+    llm = LLM(
+        model=model_name,
+        tensor_parallel_size=1,
+        dtype="float16",
+        max_model_len=VLLM_MAX_MODEL_LEN,
+    )
     sampling = SamplingParams(temperature=TEMPERATURE, max_tokens=MAX_NEW_TOKENS)
 
     prompts = [SUMMARIZATION_PROMPT.format(article=a["article"][:3000]) for a in articles]
     outputs = llm.generate(prompts, sampling)
 
     results = []
-    for i, (article, out) in enumerate(zip(articles, outputs)):
+    for article, out in zip(articles, outputs):
         results.append({
             "id": article["id"],
             "article": article["article"],
@@ -70,34 +77,18 @@ def generate_vllm(model_name: str, articles: list, label: str):
 
 
 def _build_pipeline(model_name: str):
-    """Load a text-generation pipeline, using INT4 on CUDA or fp16 on MPS/CPU."""
+    """Load a text-generation pipeline in fp16 (CUDA / MPS / CPU)."""
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
-    if torch.cuda.is_available():
-        from transformers import BitsAndBytesConfig
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            quantization_config=bnb_config,
-            device_map="auto",
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        print(f"  {model_name}: loaded in INT4 (bitsandbytes)")
-        return pipeline("text-generation", model=model, tokenizer=tokenizer)
-    else:
-        print(f"  {model_name}: loaded in fp16 (MPS/CPU)")
-        return pipeline(
-            "text-generation",
-            model=model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
-        )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto",
+    )
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    print(f"  {model_name}: fp16")
+    return pipeline("text-generation", model=model, tokenizer=tokenizer)
 
 
 def generate_transformers(model_name: str, articles: list, label: str):
@@ -128,21 +119,21 @@ def save(results: list, label: str):
     print(f"Saved {len(results)} summaries to {path}")
 
 
-def build_pairs(llama_results: list, mistral_results: list):
+def build_pairs(llama_results: list, qwen_results: list):
     """Merge into pairwise format keyed by article id."""
-    mistral_by_id = {r["id"]: r for r in mistral_results}
+    qwen_by_id = {r["id"]: r for r in qwen_results}
     pairs = []
     for r in llama_results:
         art_id = r["id"]
-        if art_id in mistral_by_id:
+        if art_id in qwen_by_id:
             pairs.append({
                 "id": art_id,
                 "article": r["article"],
                 "reference": r["reference"],
                 "summary_A": r["summary"],
                 "model_A": "llama",
-                "summary_B": mistral_by_id[art_id]["summary"],
-                "model_B": "mistral",
+                "summary_B": qwen_by_id[art_id]["summary"],
+                "model_B": "qwen",
             })
     path = OUT_DIR / "all_pairs.json"
     with open(path, "w") as f:
@@ -153,14 +144,14 @@ def build_pairs(llama_results: list, mistral_results: list):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backend", choices=["vllm", "transformers"], default="transformers")
-    parser.add_argument("--models", nargs="+", choices=["llama", "mistral", "both"], default=["both"])
+    parser.add_argument("--models", nargs="+", choices=["llama", "qwen", "both"], default=["both"])
     args = parser.parse_args()
 
     articles = load_articles()
     print(f"Loaded {len(articles)} articles")
 
     gen = generate_vllm if args.backend == "vllm" else generate_transformers
-    to_run = ["llama", "mistral"] if "both" in args.models else args.models
+    to_run = ["llama", "qwen"] if "both" in args.models else args.models
 
     all_results = {}
     for label in to_run:
@@ -168,8 +159,8 @@ def main():
         save(results, label)
         all_results[label] = results
 
-    if "llama" in all_results and "mistral" in all_results:
-        build_pairs(all_results["llama"], all_results["mistral"])
+    if "llama" in all_results and "qwen" in all_results:
+        build_pairs(all_results["llama"], all_results["qwen"])
 
     print("Done generating summaries.")
 

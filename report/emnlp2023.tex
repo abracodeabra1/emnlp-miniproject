@@ -1,0 +1,189 @@
+% EMNLP 2023 style; pdfLaTeX recommended.
+\pdfoutput=1
+
+\documentclass[11pt]{article}
+
+\usepackage[review]{EMNLP2023}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+% Placeholders for numbers not yet finalized (fill from results/*.json).
+\newcommand{\TBD}[1]{\textcolor{red}{\textbf{[TBD: #1]}}}
+\newcommand{\FigTBD}{\textcolor{gray}{\textit{(figure after \texttt{meta\_eval.py})}}}
+\newcommand{\TableTBD}{\textcolor{gray}{\textit{(table after experiments)}}}
+
+\graphicspath{{../results/figures/}}
+
+\title{Dimension-Specific Reliability of LLM Judges:\\
+  A Controlled Summarization Study with Human Gold}
+
+\author{Abraham Paul Elenjical \\
+  Roll No.\ 2022114007 \\
+  Evaluation Methods in NLP (2026)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study whether large language model (LLM) judges fail uniformly or \emph{dimension-specifically} on summarization, using a controlled setup: \TBD{N} CNN/Daily Mail articles, two comparable small instruct summarizers (Llama-3.2-1B and Qwen2.5-1.5B), and human ratings on four SummEval-style dimensions (coherence, consistency, fluency, relevance) from three annotators. We implement three judge protocols---direct scoring, pairwise comparison, and rubric-based structured evaluation---with prompt wording, reference visibility, and pairwise order varied to measure sensitivity and known biases. We hypothesize stronger agreement with humans on surface-oriented dimensions than on consistency (source-grounded factuality). \TBD{Main quantitative headline: e.g., Spearman $\rho$ by dimension and judge family.} Meta-evaluation, adversarial probes, and a failure taxonomy are reported in \texttt{results/} after the full pipeline runs.
+\end{abstract}
+
+\section{Introduction}
+
+LLM-as-a-judge is increasingly used to evaluate open-ended generation \citep{gu2024survey}. \citet{zheng2023judging} systematically study strong LLM judges and document biases including position, verbosity, and self-enhancement; separately, pairwise elicitation can be skewed by the order in which candidates appear \citep{wang2024largebench}. G-Eval shows that LLM-based scores track human judgments unevenly across tasks and are sensitive to chain-of-thought evaluation design \citep{liu2023geval}. For summarization, \citet{fabbri2021summeval} established human-validated multi-dimensional scores; subsequent work trains open evaluator LMs for direct and pairwise assessment with high human or proprietary-judge agreement \citep{kim2024prometheus2,zhu2024judgelm}. Separately, length-controlled variants of AlpacaEval formalize how auto-annotators can favor longer outputs and how to regress out that confound \citep{dubois2024length}.
+
+This miniproject treats the LLM judge as an object of study: we ask when it aligns with a human gold standard, when it fails, and how sensitive conclusions are to prompts and presentation. Our central hypothesis is that correlation with humans will be higher on coherence and fluency than on \emph{consistency}, which requires checking facts against the source article rather than surface pattern matching.
+
+\paragraph{Contributions.}
+We release a reproducible pipeline (data download, system outputs, annotation app, judge clients, meta-eval, adversarial and failure analyses) mapping directly to the course rubric: controlled task with two systems per input; human rubric with inter-annotator agreement; three judge modes plus prompt/reference/order sensitivity; meta-evaluation with correlation and bias metrics; ten adversarial summaries; and an operational failure taxonomy. As an extension, we compare multiple API-backed judges (NVIDIA NIM models and Groq-hosted judges).
+
+\section{Related Work}
+
+\textbf{LLM judges and benchmarks.}
+\citet{zheng2023judging} introduced MT-Bench and Chatbot Arena, popularizing pairwise LLM evaluation and documenting self-enhancement and other biases. \citet{wang2024largebench} document how presentation order skews pairwise LLM judgments. A recent survey synthesizes evaluation-of-evaluator methodology and bias taxonomies \citep{gu2024survey}.
+
+\textbf{Summarization and rubrics.}
+\citet{fabbri2021summeval} provide the SummEval corpus with human scores on coherence, consistency, fluency, and relevance---our annotation dimensions. \citet{liu2023geval} propose G-Eval, using chain-of-thought-style prompting for reference-free scoring on summarization and dialogue; we include a \texttt{cot} prompt variant for comparison.
+
+\textbf{Specialized judge models.}
+Prometheus~2 \citep{kim2024prometheus2} and JudgeLM \citep{zhu2024judgelm} fine-tune open models as specialist judges (direct assessment and pairwise ranking, with user-defined criteria in Prometheus~2 and bias-mitigation augmentations in JudgeLM). Our pipeline uses API instantiations \emph{inspired by} those lines of work alongside general-purpose judges. \citet{dubois2024length} motivate controlling for length when interpreting head-to-head auto-judgments; we operationalize related surface cues via verbosity bias (correlation of scores with summary length).
+
+\section{Task and Data}
+
+\paragraph{Task.}
+Open-domain \emph{single-document summarization}: given a CNN/Daily Mail news article, systems produce a short summary. The course requires challenging cases; we include ambiguous or difficult content from the news domain and, separately, ten adversarial summaries (Section~\ref{sec:adversarial}).
+
+\paragraph{Corpus.}
+We use \TBD{50} articles with paired system outputs (see \texttt{data/raw/articles\_50.json} and merged pairs in \texttt{data/system\_outputs/all\_pairs.json}). The course guideline suggests 40--60 examples; our pool is within that range.
+
+\paragraph{Systems judged.}
+Two comparable small instruct models generate summaries (fp16, Hugging Face or vLLM): \texttt{meta-llama/Llama-3.2-1B-Instruct} and \texttt{Qwen/Qwen2.5-1.5B-Instruct}. Outputs are stored under \texttt{data/system\_outputs/}.
+
+\section{Human Evaluation}
+
+\paragraph{Rubric.}
+Annotators rate each summary on four dimensions on a 1--5 Likert scale, with definitions aligned to SummEval: coherence (structure), consistency (factual alignment with the article), fluency (grammar and naturalness), and relevance (coverage of important content) \citep{fabbri2021summeval}.
+
+\paragraph{Procedure.}
+Three annotators use a Flask-based interface (\texttt{src/annotate\_app.py}) to rate summaries incrementally; scripts merge raw files (\texttt{src/merge\_annotations.py}) and aggregate to gold scores (\texttt{data/annotations/gold\_standard.json}). If human collection is incomplete, the repository supports a SummEval-derived fallback (\texttt{src/build\_summeval\_fallback.py}).
+
+\paragraph{Agreement.}
+We compute Krippendorff's $\alpha$ and pairwise Cohen's $\kappa$ per dimension (\texttt{src/compute\_iaa.py}), written to \texttt{results/iaa\_report.json}. \TableTBD{} Table~\ref{tab:iaa} will report per-dimension coefficients once annotation concludes.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+& Coherence & Consistency & Fluency & Relevance \\
+\midrule
+Krippendorff $\alpha$ & \TBD{$\alpha_{\mathrm{coh}}$} & \TBD{$\alpha_{\mathrm{con}}$} & \TBD{$\alpha_{\mathrm{flu}}$} & \TBD{$\alpha_{\mathrm{rel}}$} \\
+Cohen $\kappa$ (mean pair) & \TBD{$\kappa_{\mathrm{coh}}$} & \TBD{$\kappa_{\mathrm{con}}$} & \TBD{$\kappa_{\mathrm{flu}}$} & \TBD{$\kappa_{\mathrm{rel}}$} \\
+\bottomrule
+\end{tabular}
+\caption{Inter-annotator agreement (populate from \texttt{results/iaa\_report.json}).}
+\label{tab:iaa}
+\end{table}
+
+\section{LLM Judges and Experimental Factors}
+
+\paragraph{Judge models (extension: multiple judges).}
+Judges are queried via APIs (no local judge weights): NVIDIA NIM (OpenAI-compatible; default models configurable via environment) and Groq-hosted models for Prometheus-style, JudgeLM-style, and a strong general Llama judge; see \texttt{src/judge.py} and \texttt{IMPLEMENTATION.md} for identifiers.
+
+\paragraph{Three evaluation modes.}
+\textbf{(A) Direct scoring:} one dimension at a time, integer 1--5. \textbf{(B) Pairwise:} which summary is better overall; we run both A$\rightarrow$B and B$\rightarrow$A orderings to study position bias \citep{wang2024largebench,zheng2023judging}. \textbf{(C) Rubric-based:} all four dimensions scored in one call with explicit per-dimension criteria (\texttt{src/prompts.py}, \texttt{src/run\_experiments.py}). Results append to \texttt{results/direct\_scores.jsonl}, \texttt{results/pairwise\_scores.jsonl}, and \texttt{results/rubric\_scores.jsonl}.
+
+\section{Prompt and Reference Sensitivity}
+
+We vary \textbf{prompt wording} across three variants: \texttt{minimal} (short instruction), \texttt{standard} (brief rubric text per dimension where applicable), and \texttt{cot} (criteria plus step-by-step reasoning before the score), following the spirit of G-Eval \citep{liu2023geval}. We vary \textbf{reference visibility}: highlights or reference summaries may be included for calibration (\texttt{with\_reference}) or omitted (\texttt{no\_reference}). Pairwise mode uses the same variant grid plus order reversal.
+
+\section{Meta-Evaluation and Bias Analysis}
+\label{sec:meta}
+
+\paragraph{Alignment with humans.}
+We compute Spearman and Kendall correlations between judge scores and human gold means, per dimension and judge (\texttt{src/meta\_eval.py} $\rightarrow$ \texttt{results/meta\_eval\_report.json}). \FigTBD{} Planned figures include correlation heatmaps under \texttt{results/figures/}.
+
+\paragraph{Biases.}
+Table~\ref{tab:bias} summarizes operational metrics implemented in code: position bias from A/B vs.\ B/A win rates; verbosity bias as Spearman correlation between score and word count; reference bias as change in $\rho$ when reference text is included; self-preference as excess win rate for one system's outputs when the judge shares the same model family; prompt sensitivity as dispersion of $\rho$ across prompt variants.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lp{5.8cm}}
+\toprule
+Bias & Operationalization \\
+\midrule
+Position & Compare first-slot win rate to 0.5; report $\chi^2$ where applicable. \\
+Verbosity & Spearman $r$ (score vs.\ word count) per dimension. \\
+Reference & $\Delta\rho$ (with vs.\ without reference). \\
+Self-preference & Win rate gap for same-family summaries (Llama judge vs.\ others). \\
+Prompt sensitivity & Std.\ dev.\ of $\rho$ across \texttt{minimal}/\texttt{standard}/\texttt{cot}. \\
+\bottomrule
+\end{tabular}
+\caption{Bias analyses mirroring \citet{zheng2023judging,wang2024largebench,gu2024survey}.}
+\label{tab:bias}
+\end{table}
+
+\noindent\TBD{Insert numeric correlation and bias tables from \texttt{meta\_eval\_report.json}.}
+
+\section{Adversarial Evaluation}
+\label{sec:adversarial}
+
+We add ten adversarial summaries (\texttt{src/create\_adversarial.py}, \texttt{data/adversarial/adversarial\_examples.json}) in three types: (i) fluent but subtly inconsistent with the article, (ii) correct but poorly written, (iii) near-paraphrase with a meaning shift. This probes whether judges over-weight fluent surface form relative to source-grounded correctness, complementing prior evidence that LLM judges are sensitive to superficial cues such as verbosity \citep{zheng2023judging}. \TBD{Report preference rates and judge-wise breakdowns from \texttt{src/adversarial\_analysis.py} / \texttt{results/adversarial\_report.json}.}
+
+\section{Failure Taxonomy}
+
+Following the miniproject brief, we tag systematic divergences from gold using rules such as: high fluency with low human consistency (over-trust of fluency); inflated consistency vs.\ humans (ignored factual errors); large fluency gaps when consistency is high (penalizing style); inconsistent pairwise outcomes under order reversal (position dependence); collapsed variance across dimensions (dimension conflation). Counts and examples are emitted to \texttt{results/failure\_taxonomy.json} and a breakdown figure by \texttt{src/failure\_analysis.py}. \TBD{Summarize counts per failure mode.}
+
+\section{Discussion: Critical Questions}
+
+\paragraph{(1) When do LLM judges align with humans?}
+\TBD{Answer using per-dimension $\rho$ and qualitative examples.}
+
+\paragraph{(2) Where do they fail and why?}
+\TBD{Link taxonomy categories to bias metrics and adversarial outcomes.}
+
+\paragraph{(3) Internal consistency.}
+\TBD{Compare direct vs.\ rubric vs.\ pairwise-derived rankings when applicable.}
+
+\paragraph{(4) Prompt sensitivity.}
+\TBD{Report dispersion across variants and reference conditions.}
+
+\paragraph{(5) Replacement for human evaluation?}
+\TBD{Conditional recommendation grounded in agreement levels and failure modes.}
+
+\section{Conclusion}
+
+We presented a controlled summarization benchmark with human gold, multi-judge API evaluation, and analyses targeting dimension-specific reliability. \TBD{One-sentence summary of whether consistency lags coherence/fluency as hypothesized, and main bias/adversarial takeaways.}
+
+\section*{Limitations}
+
+Small sample size and English-only news text limit generalization. Student annotators are not expert raters; API judges vary with provider updates and rate limits. System models are small; conclusions may not transfer to frontier summarizers. Some analyses depend on complete JSONL result files from \texttt{run\_experiments.py}.
+
+\section*{Ethics Statement}
+
+Annotators were informed of workload; article text and model outputs are used only for coursework. API providers process prompts under their terms; we do not deploy judges for end-user decisions.
+
+\section*{Acknowledgements}
+
+This report was prepared for the course \textit{Evaluation Methods in NLP} (2026).
+
+% References: project-specific keys in custom.bib
+\bibliography{custom}
+\bibliographystyle{acl_natbib}
+
+\appendix
+
+\section{Reproducibility and Artifacts}
+
+Code: \texttt{src/} (see \texttt{run\_all.sh}). Prompt templates: \texttt{src/prompts.py}. Human annotation: \texttt{src/annotate\_app.py}. Full prompt strings and example screenshots can be included in an appendix PDF per course instructions.
+
+\end{document}

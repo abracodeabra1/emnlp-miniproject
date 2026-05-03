@@ -7,9 +7,9 @@ Experiments:
   C) Rubric-based: all judges × all pairs × 2 variants × with/without ref
 
 Usage:
-  python src/run_experiments.py --judges gemini prometheus judgelm llama
-  python src/run_experiments.py --judges gemini --mode direct  # run one judge/mode
-  python src/run_experiments.py --judges gemini --mode all --clear  # fresh run
+  python src/run_experiments.py --judges nvidia prometheus judgelm llama
+  python src/run_experiments.py --judges nvidia --mode direct  # run one judge/mode
+  python src/run_experiments.py --judges nvidia --mode all --clear  # fresh run
 
 Results saved to:
   results/direct_scores.jsonl
@@ -19,14 +19,22 @@ Results saved to:
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
 from tqdm import tqdm
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-RESULTS_DIR = Path(__file__).parent.parent / "results"
+# Running as `python src/run_experiments.py` puts `src/` on sys.path, not the repo root;
+# `from src.judge import ...` needs the parent of `src/` on the path.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+DATA_DIR = _PROJECT_ROOT / "data"
+RESULTS_DIR = _PROJECT_ROOT / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
-ALL_JUDGES = ["gemini", "prometheus", "judgelm", "llama"]
+ALL_JUDGES = ["nvidia", "prometheus", "judgelm", "llama"]
 ALL_VARIANTS = ["minimal", "standard", "cot"]
 PAIRWISE_VARIANTS = ["minimal", "standard", "cot"]
 
@@ -159,6 +167,11 @@ def main():
     )
     args = parser.parse_args()
 
+    from src.judge import expand_judge_names
+
+    judges = expand_judge_names(args.judges)
+    print(f"Judges (expanded): {judges}")
+
     if args.clear:
         for fname in ["direct_scores.jsonl", "pairwise_scores.jsonl", "rubric_scores.jsonl"]:
             p = RESULTS_DIR / fname
@@ -171,11 +184,11 @@ def main():
     print(f"Loaded {len(pairs)} pairs, {len(adversarial)} adversarial examples")
 
     if args.mode in ("direct", "all"):
-        run_direct(args.judges, pairs, adversarial)
+        run_direct(judges, pairs, adversarial)
     if args.mode in ("pairwise", "all"):
-        run_pairwise(args.judges, pairs, adversarial)
+        run_pairwise(judges, pairs, adversarial)
     if args.mode in ("rubric", "all"):
-        run_rubric(args.judges, pairs)
+        run_rubric(judges, pairs)
 
     print("\nAll experiments complete. Results in results/")
 
